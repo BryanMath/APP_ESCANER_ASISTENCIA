@@ -1,0 +1,22 @@
+# Registro de alumnos
+
+App ajustada a la credencial del COBACH No. 32.
+
+El QR del reverso trae estas líneas:
+
+PILOTO
+ID_MATRICULA
+GRUPO
+RANGO_LISTA
+NICKNAME
+BASE
+
+La tabla y las exportaciones usan siempre estas columnas:
+
+Nombre, Matrícula, Grupo, Lista, Nickname, Plantel, Fecha, Hora
+
+La fecha y la hora se toman en el momento del escaneo, en horario de Ciudad de México, y no cambian si tardas en confirmar.
+
+Excel sale con encabezado, filtro, fila congelada, matrícula como texto y filas alternadas. CSV usa los mismos encabezados y se abre bien en Excel.
+
+La cámara solo funciona por HTTPS o en la red local, no al abrir el archivo directo.
