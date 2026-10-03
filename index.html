@@ -37,10 +37,10 @@
         var(--bg);
       min-height: 100dvh;
     }
-    button, input { font: inherit; color: inherit; }
+    button, input, select { font: inherit; color: inherit; }
     button { cursor: pointer; }
     .app {
-      max-width: 1040px;
+      max-width: 1060px;
       margin: 0 auto;
       padding: calc(18px + env(safe-area-inset-top)) 16px calc(28px + env(safe-area-inset-bottom));
     }
@@ -67,15 +67,18 @@
       box-shadow: 0 10px 24px rgba(20, 155, 186, 0.28);
     }
     .btn.ghost, .btn.danger { background: transparent; color: var(--text); border: 1px solid var(--line); box-shadow: none; }
+    .btn.accent { background: #149bba; color: #ffffff; border: 1px solid var(--teal); }
     .btn.danger { color: var(--danger); }
     .btn.small { padding: 8px 12px; font-size: 0.86rem; }
     .panel { padding: 14px; margin-bottom: 14px; }
     .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-    input[type="search"], input[type="text"] {
-      width: 100%; background: rgba(4, 12, 22, 0.55);
-      border: 1px solid var(--line); border-radius: 14px; padding: 12px; outline: none;
+    input[type="search"], input[type="text"], input[type="date"], select {
+      background: rgba(4, 12, 22, 0.55);
+      border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; outline: none;
     }
-    input:focus { border-color: rgba(42, 212, 195, 0.7); }
+    input[type="search"] { flex: 2 1 200px; }
+    select { flex: 1 1 140px; }
+    input:focus, select:focus { border-color: rgba(42, 212, 195, 0.7); }
     input[readonly] { color: var(--teal); }
     .table-wrap { overflow: auto; border-radius: 16px; border: 1px solid var(--line); margin-top: 12px; }
     table { width: 100%; border-collapse: collapse; min-width: 860px; }
@@ -123,13 +126,13 @@
       <img src="icon-192.png" alt="Icono de la app" />
       <div>
         <h1>Registro de alumnos</h1>
-        <div class="sub">COBACH No. 32 · credencial QR · fecha y hora de cada escaneo</div>
+        <div class="sub">COBACH No. 32 · Pase de lista QR multivariable</div>
       </div>
     </header>
 
     <section class="stats">
-      <div class="stat"><b id="count">0</b><span>alumnos guardados</span></div>
-      <div class="stat"><b id="today">0</b><span>registrados hoy</span></div>
+      <div class="stat"><b id="count">0</b><span>registros totales</span></div>
+      <div class="stat"><b id="today">0</b><span>asistencias hoy</span></div>
       <div class="stat"><b id="last">—</b><span>último escaneo</span></div>
     </section>
 
@@ -142,21 +145,30 @@
 
     <section class="panel">
       <div class="toolbar no-print">
-        <input id="search" type="search" placeholder="Buscar por nombre, matrícula, grupo o nickname" />
-        <button class="btn ghost small" id="csvBtn">CSV</button>
-        <button class="btn ghost small" id="xlsxBtn">Excel</button>
-        <button class="btn ghost small" id="printBtn">Imprimir / PDF</button>
-        <button class="btn danger small" id="clearBtn">Vaciar</button>
+        <select id="filterGroup">
+          <option value="">Todos los grupos</option>
+        </select>
+        <select id="filterDate">
+          <option value="">Todas las fechas</option>
+        </select>
+        <input id="search" type="search" placeholder="Buscar por nombre, matrícula o nickname..." />
+      </div>
+      <div class="toolbar no-print" style="margin-top: 10px;">
+        <button class="btn ghost small" id="csvBtn">CSV filtrado</button>
+        <button class="btn ghost small" id="xlsxBtn">Excel diario</button>
+        <button class="btn accent small" id="matrixBtn">📊 Sábana de Asistencias (Excel)</button>
+        <button class="btn ghost small" id="printBtn">Imprimir</button>
+        <button class="btn danger small" id="clearBtn">Vaciar datos</button>
       </div>
       <div class="table-wrap" id="tableWrap"></div>
-      <p class="note">Los datos se quedan en este teléfono. Excel y CSV salen con las mismas columnas: nombre, matrícula, grupo, lista, nickname, plantel, fecha y hora.</p>
+      <p class="note">Los datos se guardan localmente en el celular. Para la sábana acumulada, filtra por grupo o déjalo en todos para exportar la matriz completa de asistencias (A) y faltas (F).</p>
     </section>
   </div>
 
   <div class="overlay" id="scanOverlay">
     <div class="sheet">
       <h2>Apunta al QR de la credencial</h2>
-      <p class="note">Usa la cámara trasera y acepta el permiso. La página debe abrirse por HTTPS o en la red local.</p>
+      <p class="note">Usa la cámara trasera y acepta el permiso. Requiere conexión HTTPS.</p>
       <div id="reader"></div>
       <div class="actions" style="margin-top:12px">
         <button class="btn ghost" id="closeScan">Cerrar</button>
@@ -208,6 +220,7 @@
     }
     function persist() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(students));
+      populateFilters();
       render();
     }
     function uid() {
@@ -234,8 +247,13 @@
       };
     }
     function escapeHtml(value) {
-      return String(value ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
-
+      return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      }[ch]));
     }
     function toast(text) {
       const el = $("toast");
@@ -272,19 +290,45 @@
       return { fields, raw };
     }
 
-    function render() {
+    function populateFilters() {
+      const groups = [...new Set(students.map((s) => s.grupo).filter(Boolean))].sort();
+      const dates = [...new Set(students.map((s) => s.day).filter(Boolean))].sort().reverse();
+      
+      const currentGroup = $("filterGroup").value;
+      const currentDate = $("filterDate").value;
+
+      $("filterGroup").innerHTML = '<option value="">Todos los grupos</option>' + 
+        groups.map((g) => `<option value="${escapeHtml(g)}" ${g === currentGroup ? "selected" : ""}>Grupo: ${escapeHtml(g)}</option>`).join("");
+
+      $("filterDate").innerHTML = '<option value="">Todas las fechas</option>' + 
+        dates.map((d) => `<option value="${escapeHtml(d)}" ${d === currentDate ? "selected" : ""}>Fecha: ${escapeHtml(d)}</option>`).join("");
+    }
+
+    function getFilteredList() {
       const q = ($("search").value || "").trim().toLowerCase();
-      const today = stamp().day;
-      const shown = students.filter((s) => {
-        if (!q) return true;
-        return COLUMNS.some((c) => String(s[c.key] || "").toLowerCase().includes(q));
+      const g = $("filterGroup").value;
+      const d = $("filterDate").value;
+
+      return students.filter((s) => {
+        if (g && s.grupo !== g) return false;
+        if (d && s.day !== d) return false;
+        if (q) {
+          return COLUMNS.some((col) => String(s[col.key] || "").toLowerCase().includes(q));
+        }
+        return true;
       });
+    }
+
+    function render() {
+      const today = stamp().day;
+      const shown = getFilteredList();
+
       $("count").textContent = students.length;
       $("today").textContent = students.filter((s) => s.day === today).length;
       $("last").textContent = students[0] ? students[0].hora : "—";
 
       if (!shown.length) {
-        $("tableWrap").innerHTML = '<div class="empty">Todavía no hay alumnos. Escanea el reverso de la credencial, donde dice ESCANÉAME.</div>';
+        $("tableWrap").innerHTML = '<div class="empty">No hay alumnos para mostrar con los filtros seleccionados.</div>';
         return;
       }
       const head = ["#", ...COLUMNS.map((c) => c.label), "Fecha", "Hora", ""].map((h) => `<th>${h}</th>`).join("");
@@ -316,7 +360,7 @@
     async function startScan() {
       $("scanOverlay").classList.add("open");
       if (!window.Html5Qrcode) {
-        alert("No se pudo cargar el lector. Revisa tu conexión.");
+        alert("No se pudo cargar el lector. Revisa tu conexión a internet.");
         return;
       }
       scanner = new Html5Qrcode("reader");
@@ -334,7 +378,7 @@
       } catch (err) {
         scanning = false;
         $("scanOverlay").classList.remove("open");
-        alert("No se pudo abrir la cámara. Permite el acceso o usa 'Subir foto del QR'.\n\n" + err);
+        alert("No se pudo abrir la cámara. Revisa permisos o abre vía HTTPS.\n\n" + err);
       }
     }
     async function stopScan() {
@@ -345,20 +389,6 @@
         try { scanner.clear(); } catch {}
       }
       scanner = null;
-    }
-
-    function rowsForExport() {
-      return students.map((s, i) => ({
-        "#": i + 1,
-        Nombre: s.nombre || "",
-        Matrícula: s.matricula || "",
-        Grupo: s.grupo || "",
-        Lista: s.lista || "",
-        Nickname: s.nickname || "",
-        Plantel: s.plantel || "",
-        Fecha: s.fecha || "",
-        Hora: s.hora || ""
-      }));
     }
 
     $("scanBtn").onclick = startScan;
@@ -373,7 +403,7 @@
         const text = await reader.scanFile(file, true);
         openForm(parsePayload(text), stamp());
       } catch {
-        alert("No encontré un QR en esa imagen.");
+        alert("No se detectó código QR en la imagen seleccionada.");
       } finally {
         try { reader.clear(); } catch {}
       }
@@ -388,49 +418,61 @@
         return;
       }
       const dup = students.find((s) => record.matricula && s.matricula === record.matricula && s.day === record.day);
-      if (dup && !confirm(`${record.nombre || "Este alumno"} ya se registró hoy a las ${dup.hora}. ¿Guardar otro escaneo?`)) return;
+      if (dup && !confirm(`${record.nombre || "Este alumno"} ya cuenta con asistencia hoy a las ${dup.hora}. ¿Deseas registrarlo nuevamente?`)) return;
       students.unshift(record);
       $("formOverlay").classList.remove("open");
       persist();
-      toast(`${record.nombre || "Alumno"} · ${record.fecha} ${record.hora}`);
+      toast(`Registrado: ${record.nombre || "Alumno"} (${record.grupo || "S/G"})`);
     };
+
     $("search").oninput = render;
+    $("filterGroup").onchange = render;
+    $("filterDate").onchange = render;
+
     $("tableWrap").onclick = (event) => {
       const id = event.target?.dataset?.del;
       if (!id) return;
       students = students.filter((s) => s.id !== id);
       persist();
     };
+
     $("csvBtn").onclick = () => {
-      if (!students.length) return alert("No hay alumnos para exportar.");
+      const shown = getFilteredList();
+      if (!shown.length) return alert("No hay registros en la vista actual.");
       const headers = ["#", "Nombre", "Matrícula", "Grupo", "Lista", "Nickname", "Plantel", "Fecha", "Hora"];
       const lines = [headers.join(",")];
-      rowsForExport().forEach((row) => {
-        lines.push(headers.map((h) => `"${String(row[h]).replace(/"/g, '""')}"`).join(","));
+      shown.forEach((s, idx) => {
+        const row = [idx + 1, s.nombre, s.matricula, s.grupo, s.lista, s.nickname, s.plantel, s.fecha, s.hora];
+        lines.push(row.map((val) => `"${String(val || "").replace(/"/g, '""')}"`).join(","));
       });
       const blob = new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = `registro-alumnos-${stamp().day}.csv`;
+      a.download = `asistencias-${$("filterGroup").value || "todos"}-${stamp().day}.csv`;
       a.click();
     };
+
     $("xlsxBtn").onclick = async () => {
-      if (!students.length) return alert("No hay alumnos para exportar.");
-      if (!window.ExcelJS) return alert("No se pudo cargar Excel. Revisa tu conexión.");
+      const shown = getFilteredList();
+      if (!shown.length) return alert("No hay registros en la vista actual.");
+      if (!window.ExcelJS) return alert("Cargando librería de Excel. Revisa tu conexión.");
+
       const wb = new ExcelJS.Workbook();
-      wb.creator = "Registro de alumnos";
-      const ws = wb.addWorksheet("Alumnos", {
-        views: [{ state: "frozen", ySplit: 3, showGridLines: false }],
-        pageSetup: { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 1 }
+      const ws = wb.addWorksheet("Pase de lista", {
+        views: [{ state: "frozen", ySplit: 3, showGridLines: true }],
+        pageSetup: { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 }
       });
+
+      const currentG = $("filterGroup").value || "TODOS";
       ws.mergeCells("A1:I1");
-      ws.getCell("A1").value = "Registro de alumnos · COBACH No. 32";
-      ws.getCell("A1").font = { name: "Calibri", size: 16, bold: true, color: { argb: "FF073044" } };
-      ws.getCell("A1").alignment = { vertical: "middle" };
-      ws.getRow(1).height = 26;
+      ws.getCell("A1").value = `Registro de Alumnos · COBACH No. 32 · Grupo: ${currentG}`;
+      ws.getCell("A1").font = { name: "Calibri", size: 15, bold: true, color: { argb: "FF073044" } };
+      ws.getRow(1).height = 25;
+
       ws.mergeCells("A2:I2");
-      ws.getCell("A2").value = `Exportado el ${stamp().fecha} a las ${stamp().hora} · ${students.length} registro(s)`;
+      ws.getCell("A2").value = `Generado el ${stamp().fecha} a las ${stamp().hora} · ${shown.length} registro(s)`;
       ws.getCell("A2").font = { name: "Calibri", size: 10, color: { argb: "FF5E7384" } };
+
       const headers = ["#", "Nombre", "Matrícula", "Grupo", "Lista", "Nickname", "Plantel", "Fecha", "Hora"];
       const headerRow = ws.getRow(3);
       headerRow.values = headers;
@@ -439,40 +481,172 @@
         cell.font = { name: "Calibri", size: 11, bold: true, color: { argb: "FFFFFFFF" } };
         cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0B3A4A" } };
         cell.alignment = { vertical: "middle", horizontal: "center" };
-        cell.border = { bottom: { style: "thin", color: { argb: "FF149BBA" } } };
       });
-      rowsForExport().forEach((row, index) => {
-        const excelRow = ws.addRow(headers.map((h) => row[h]));
-        excelRow.height = 20;
-        excelRow.eachCell((cell, col) => {
-          cell.font = { name: "Calibri", size: 11, color: { argb: "FF163040" } };
+
+      shown.forEach((s, i) => {
+        const row = ws.addRow([i + 1, s.nombre, s.matricula, s.grupo, s.lista, s.nickname, s.plantel, s.fecha, s.hora]);
+        row.height = 20;
+        row.eachCell((cell, col) => {
           cell.alignment = { vertical: "middle", horizontal: col === 2 || col === 7 ? "left" : "center" };
-          cell.border = { bottom: { style: "hair", color: { argb: "FFD5E3EA" } } };
-          if (index % 2 === 1) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF4FBFA" } };
           if (col === 3) cell.numFmt = "@";
+          if (i % 2 === 1) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF4FBFA" } };
         });
       });
+
       ws.columns = [
         { width: 6 }, { width: 36 }, { width: 16 }, { width: 12 }, { width: 10 },
-        { width: 18 }, { width: 42 }, { width: 14 }, { width: 14 }
+        { width: 18 }, { width: 40 }, { width: 14 }, { width: 14 }
       ];
       ws.autoFilter = { from: "A3", to: "I3" };
-      ws.pageSetup.printTitlesRow = "1:3";
+
       const buffer = await wb.xlsx.writeBuffer();
       const a = document.createElement("a");
       a.href = URL.createObjectURL(new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
-      a.download = `registro-alumnos-${stamp().day}.xlsx`;
+      a.download = `asistencias-diarias-${currentG}-${stamp().day}.xlsx`;
       a.click();
     };
+
+    /* GENERADOR DE LA SÁBANA ACUMULADA DE ASISTENCIAS */
+    $("matrixBtn").onclick = async () => {
+      if (!students.length) return alert("No hay registros en el historial.");
+      if (!window.ExcelJS) return alert("Cargando librería de Excel. Revisa tu conexión.");
+
+      const selectedGroup = $("filterGroup").value;
+      const targetRecords = selectedGroup ? students.filter((s) => s.grupo === selectedGroup) : students;
+
+      if (!targetRecords.length) return alert("No hay registros para este grupo.");
+
+      // 1. Obtener todas las fechas únicas de clase registradas
+      const uniqueDays = [...new Set(targetRecords.map((s) => s.day))].sort();
+      
+      // 2. Obtener lista única de alumnos (usando matrícula o nombre)
+      const studentMap = new Map();
+      targetRecords.forEach((s) => {
+        const key = s.matricula || s.nombre;
+        if (!studentMap.has(key)) {
+          studentMap.set(key, {
+            nombre: s.nombre,
+            matricula: s.matricula,
+            grupo: s.grupo,
+            lista: parseInt(s.lista) || 999
+          });
+        }
+      });
+
+      // Ordenar por número de lista y luego por nombre
+      const sortedStudents = Array.from(studentMap.values()).sort((a, b) => {
+        if (a.lista !== b.lista) return a.lista - b.lista;
+        return a.nombre.localeCompare(b.nombre);
+      });
+
+      // 3. Crear el libro y hoja con ExcelJS
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet("Sábana de Asistencias", {
+        views: [{ state: "frozen", xSplit: 4, ySplit: 3, showGridLines: true }]
+      });
+
+      const titleGroup = selectedGroup || "CONCENTRADO GENERAL";
+      ws.mergeCells("A1:G1");
+      ws.getCell("A1").value = `SÁBANA CONCENTRADA DE ASISTENCIAS · GRUPO: ${titleGroup}`;
+      ws.getCell("A1").font = { name: "Calibri", size: 14, bold: true, color: { argb: "FF073044" } };
+      ws.getRow(1).height = 24;
+
+      // Encabezados dinámicos
+      const fixedHeaders = ["#", "No. Lista", "Nombre del Alumno", "Matrícula", "Grupo"];
+      const dateHeaders = uniqueDays.map((d) => {
+        const [y, m, day] = d.split("-");
+        return `${day}/${m}`;
+      });
+      const summaryHeaders = ["Total Asistencias", "Total Faltas", "% Asistencia"];
+      const allHeaders = [...fixedHeaders, ...dateHeaders, ...summaryHeaders];
+
+      const headerRow = ws.getRow(3);
+      headerRow.values = allHeaders;
+      headerRow.height = 24;
+      headerRow.eachCell((cell, colIndex) => {
+        cell.font = { name: "Calibri", size: 10, bold: true, color: { argb: "FFFFFFFF" } };
+        cell.alignment = { vertical: "middle", horizontal: "center" };
+        if (colIndex <= 5) {
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0B3A4A" } };
+        } else if (colIndex <= 5 + dateHeaders.length) {
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF149BBA" } };
+        } else {
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF073044" } };
+        }
+      });
+
+      // Llenar datos de cada alumno
+      sortedStudents.forEach((st, idx) => {
+        let totalA = 0;
+        let totalF = 0;
+        const rowValues = [
+          idx + 1,
+          st.lista === 999 ? "—" : st.lista,
+          st.nombre,
+          st.matricula,
+          st.grupo
+        ];
+
+        // Verificar asistencia en cada día
+        uniqueDays.forEach((d) => {
+          const attended = targetRecords.some((r) => 
+            (r.matricula ? r.matricula === st.matricula : r.nombre === st.nombre) && r.day === d
+          );
+          if (attended) {
+            rowValues.push("A");
+            totalA++;
+          } else {
+            rowValues.push("F");
+            totalF++;
+          }
+        });
+
+        const pct = uniqueDays.length > 0 ? Math.round((totalA / uniqueDays.length) * 100) + "%" : "100%";
+        rowValues.push(totalA, totalF, pct);
+
+        const r = ws.addRow(rowValues);
+        r.height = 19;
+        r.eachCell((cell, colIndex) => {
+          cell.font = { name: "Calibri", size: 10 };
+          cell.alignment = { vertical: "middle", horizontal: colIndex === 3 ? "left" : "center" };
+          
+          // Formato condicional visual para A y F
+          if (cell.value === "A") {
+            cell.font = { bold: true, color: { argb: "FF0F6B43" } };
+            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE6F7ED" } };
+          } else if (cell.value === "F") {
+            cell.font = { bold: true, color: { argb: "FFC5221F" } };
+            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFCE8E6" } };
+          }
+          if (colIndex === 4) cell.numFmt = "@";
+        });
+      });
+
+      // Configuración de anchos de columna
+      ws.columns = [
+        { width: 5 }, { width: 9 }, { width: 34 }, { width: 14 }, { width: 9 },
+        ...uniqueDays.map(() => ({ width: 8 })),
+        { width: 16 }, { width: 14 }, { width: 14 }
+      ];
+
+      const buffer = await wb.xlsx.writeBuffer();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+      a.download = `sabana-asistencias-${titleGroup}-${stamp().day}.xlsx`;
+      a.click();
+    };
+
     $("printBtn").onclick = () => window.print();
     $("clearBtn").onclick = () => {
       if (!students.length) return;
-      if (confirm("Esto borra todos los alumnos guardados en este teléfono.")) {
+      if (confirm("¿Estás seguro de vaciar todos los registros del celular? Te sugerimos exportar primero a Excel.")) {
         students = [];
         persist();
       }
     };
+
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+    populateFilters();
     render();
   </script>
 </body>
