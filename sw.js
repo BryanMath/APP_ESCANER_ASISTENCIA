@@ -1,54 +1,43 @@
-const CACHE_NAME = "alumnos-offline-v6";
-const ASSETS_TO_CACHE = [
+/* Registro de alumnos · COBACH No. 32
+   Guarda la app en el teléfono para que el pase de lista funcione sin internet. */
+const CACHE = "alumnos-cobach32-v5";
+const FILES = [
   "./",
   "./index.html",
   "./manifest.json",
   "./icon-192.png",
   "./icon-512.png",
-  "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js",
-  "https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"
+  "./LEEME.txt",
+  "./vendor/html5-qrcode.min.js",
+  "./vendor/exceljs.min.js"
 ];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
-    }).then(() => self.skipWaiting())
+    caches.open(CACHE).then((cache) => cache.addAll(FILES)).then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => {
-      return Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
-      );
-    }).then(() => self.clients.claim())
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))
+      .then(() => self.clients.claim())
   );
 });
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
-
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse; // Devuelve la versión guardada en el celular
-      }
-      return fetch(event.request).then((networkResponse) => {
-        if (!networkResponse || networkResponse.status !== 200) {
-          return networkResponse;
+    caches.match(event.request).then((cached) => {
+      if (cached) return cached;
+      return fetch(event.request).then((response) => {
+        if (response && response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE).then((cache) => cache.put(event.request, copy)).catch(() => {});
         }
-        const responseToCache = networkResponse.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache); // Guarda copias nuevas
-        });
-        return networkResponse;
-      }).catch(() => {
-        if (event.request.destination === "document") {
-          return caches.match("./index.html");
-        }
-      });
+        return response;
+      }).catch(() => caches.match("./index.html"));
     })
   );
 });
