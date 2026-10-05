@@ -49,15 +49,24 @@ function fold(value) {
 function apellidoPaterno(nombre) {
   const clean = String(nombre || "").trim().replace(/\s+/g, " ");
   if (!clean) return "";
-  if (clean.includes(",")) return clean.split(",")[0].trim();
-  return clean.split(" ")[0];
+  if (clean.includes(",")) return clean.split(",")[0].trim().split(" ")[0];
+  const parts = clean.split(" ");
+  if (parts.length === 1) return parts[0];
+  if (parts.length === 2) return parts[1];
+  const particles = new Set(["de", "del", "la", "las", "los", "y", "van", "von", "di", "da"]);
+  let maternoStart = parts.length - 1;
+  while (maternoStart > 1 && particles.has(fold(parts[maternoStart - 1]))) maternoStart -= 1;
+  let paternoEnd = maternoStart - 1;
+  let paternoStart = paternoEnd;
+  while (paternoStart > 0 && particles.has(fold(parts[paternoStart - 1]))) paternoStart -= 1;
+  return parts.slice(paternoStart, paternoEnd + 1).join(" ");
 }
 function byApellido(a, b) {
   const ap = fold(apellidoPaterno(a.nombre)).localeCompare(fold(apellidoPaterno(b.nombre)), "es");
   if (ap) return ap;
-  const lista = (parseInt(a.lista, 10) || 9999) - (parseInt(b.lista, 10) || 9999);
-  if (lista) return lista;
-  return fold(a.nombre).localeCompare(fold(b.nombre), "es");
+  const full = fold(a.nombre).localeCompare(fold(b.nombre), "es");
+  if (full) return full;
+  return (parseInt(a.lista, 10) || 9999) - (parseInt(b.lista, 10) || 9999);
 }
 function sortStudents(list) {
   return [...list].sort(byApellido);
