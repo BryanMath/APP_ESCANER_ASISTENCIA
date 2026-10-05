@@ -1,0 +1,53 @@
+Registro de alumnos — COBACH No. 32
+====================================
+
+Sube TODA esta carpeta a GitHub, en la misma carpeta donde estaba index.html.
+No copies el código desde el chat: el error de los botones nació así,
+porque un símbolo se comió al pegarlo.
+
+Archivos que deben quedar juntos:
+- index.html
+- app.js
+- sw.js
+- manifest.json
+- icon-192.png
+- icon-512.png
+- vendor/html5-qrcode.min.js
+- vendor/exceljs.min.js
+
+Después de subirlos, en GitHub: Settings > Pages > rama main > carpeta raíz.
+Abre la dirección https que te da GitHub Pages. No abras el archivo suelto.
+
+La cámara solo funciona por HTTPS. Con datos móviles o con Wi-Fi da igual,
+porque ya no depende de internet para leer el QR ni para armar el Excel:
+esas dos librerías van dentro de vendor.
+
+La primera visita necesita internet para guardar la copia en el teléfono.
+Luego sigue funcionando sin internet. Si cambias archivos, cierra la pestaña
+y ábrela otra vez.
+
+Cómo se usa
+-----------
+1. Elige o deja que el QR llene el grupo.
+2. Escanea. La fecha y la hora quedan en horario de Ciudad de México
+   en el momento del escaneo, aunque tardes en confirmar.
+3. Cada grupo se guarda en el mismo teléfono, separado por el filtro Grupo.
+4. Excel del día y CSV del día bajan con el grupo y la fecha en el nombre.
+   Ejemplo: cobach32_3a_lista_2026-10-05.xlsx
+5. El Excel del día trae dos hojas: quien sí se escaneó, y el pase con Falta.
+6. Cuando juntes varias semanas, Excel de asistencia arma una columna por día.
+   Asistencia = se escaneó. Falta = ya estaba en el grupo y ese día no se escaneó.
+   Un día anterior a su primer registro no cuenta como falta.
+7. Esos Excel salen ordenados por la primera palabra del nombre,
+   que en la credencial es el apellido paterno.
+   Si el nombre viene como "García López, Juan", usa lo que está antes de la coma.
+
+El QR puede traer líneas con nombre:
+PILOTO: ...
+ID_MATRICULA: ...
+GRUPO: ...
+RANGO_LISTA: ...
+NICKNAME: ...
+BASE: ...
+
+También acepta esas 6 líneas en ese orden, sin los nombres.
